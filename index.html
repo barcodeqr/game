@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 大砲VS大量増殖防衛ゲーム</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #1a1a1a; font-family: sans-serif; user-select: none; }
+        #canvas-container { width: 100vw; height: 100vh; display: block; }
+        #ui {
+            position: absolute; top: 10px; left: 10px; color: #fff;
+            font-size: 16px; font-weight: bold; text-shadow: 1px 1px 3px #000;
+            pointer-events: none;
+        }
+        #game-over {
+            display: none; position: absolute; top: 0; left: 0;
+            width: 100vw; height: 100vh; background: rgba(0,0,0,0.8);
+            color: #ff3333; flex-direction: column; justify-content: center;
+            align-items: center; cursor: pointer;
+        }
+    </style>
+
+    <!-- Three.js 外部ライブラリの読み込み -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+    <div id="ui">
+        <div id="score-text">SCORE: 0</div>
+        <div id="cannons-text">CANNONS: 1</div>
+        <div id="hp-text" style="color:#2ecc71;">HP: 100 / 100</div>
+    </div>
+    <div id="game-over">
+        <h1 style="font-size: 40px; margin: 0;">GAME OVER</h1>
+        <p style="color:#fff; font-size:18px;">防衛線が突破された！</p>
+        <p id="final-score" style="color:#fff; font-size:18px;">Final Score: 0</p>
+        <p style="color:#aaa; font-size:14px; margin-top:20px;">画面をタップ/クリックで再挑戦</p>
+    </div>
+
+<script>
+// --- 基本セットアップ ---
+const container = document.getElementById('canvas-container');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(0, 35, 25);
+camera.lookAt(0, 0, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+container.appendChild(renderer.domElement);
+
+// --- ライティング ---
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+scene.add(ambientLight);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(10, 30, 10);
+dirLight.castShadow = true;
+scene.add(dirLight);
+
+// --- フィールド & 地形 ---
+const fieldWidth = 18;
+const fieldLength = 32;
+
+// 広大な外側（草地）の床
+const outerGrassGeo = new THREE.PlaneGeometry(200, 200);
+const outerGrassMat = new THREE.MeshStandardMaterial({ color: 0x4ea832, roughness: 0.9 });
+const outerGrass = new THREE.Mesh(outerGrassGeo, outerGrassMat);
+outerGrass.rotation.x = -Math.PI / 2;
+outerGrass.position.y = -0.05;
+outerGrass.receiveShadow = true;
+scene.add(outerGrass);
+
+// 中央のゲーム進行コース（土）
+const floorGeo = new THREE.PlaneGeometry(fieldWidth, fieldLength);
+const floorMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.95 });
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+// 防衛線（赤ライン）
+const lineGeo = new THREE.BoxGeometry(fieldWidth, 0.1, 0.2);
+const lineMat = new THREE.MeshBasicMaterial({ color: 0xff3333 });
+const defenseLine = new THREE.Mesh(lineGeo, lineMat);
+defenseLine.position.set(0, 0.05, 12);
+scene.add(defenseLine);
+
+// --- ゲーム変数 ---
+let isGameOver = false;
+let score = 0;
+let frame = 0;
+
+let player = {
+    x: 0,
+    z: 13,
+    hp: 100,
+    maxHp: 100,
+    cannons: 1,
+    fireRate: 16
+};
+
+let playerGroup = new THREE.Group();
+scene.add(playerGroup);
+
+let bullets = [];
+let enemies = [];
+let gates = [];
+
+// --- テクスチャ・文字用描画ヘルパー ---
+function createTextSprite(text, fontSize = 90, textColor = "#ffff00", strokeColor = "#000000") {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512; 
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+    
+    ctx.clearRect(0, 0, 512, 256);
+    ctx.font = `900 ${fontSize}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    if (strokeColor) {
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = 16;
+        ctx.strokeText(text, 256, 128);
+    }
+
+    ctx.fillStyle = textColor;
+    ctx.fillText(text, 256, 128);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    return { canvas, texture };
+}
+
+// 3D大砲の生成
+function createCannonMesh() {
+    const cannonGroup = new THREE.Group();
+    const bodyGeo = new THREE.CylinderGeometry(0.3, 0.4, 1.5, 12);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.3 });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.rotation.x = -Math.PI / 3;
+    body.position.y = 0.6;
+    body.castShadow = true;
+    cannonGroup.add(body);
+
+    const baseGeo = new THREE.BoxGeometry(1, 0.4, 1.2);
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
+    const base = new THREE.Mesh(baseGeo, baseMat);
+    base.position.y = 0.2;
+    base.castShadow = true;
+    cannonGroup.add(base);
+
+    return cannonGroup;
+}
+
+function updatePlayerCannons() {
+    while(playerGroup.children.length > 0){ 
+        playerGroup.remove(playerGroup.children[0]); 
+    }
+    const spacing = 1.2;
+    const startX = -((player.cannons - 1) * spacing) / 2;
+    for (let i = 0; i < player.cannons; i++) {
+        const cannon = createCannonMesh();
+        cannon.position.set(startX + i * spacing, 0, 0);
+        playerGroup.add(cannon);
+    }
+}
+
+// 3D人型（通常・大型共通）の生成
+function createHumanMesh(scale, color, hp = 1) {
+    const group = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color: color });
+
+    const headGeo = new THREE.SphereGeometry(0.4 * scale, 12, 12);
+    const head = new THREE.Mesh(headGeo, mat);
+    head.position.y = 1.4 * scale;
+    head.castShadow = true;
+    group.add(head);
+
+    const bodyGeo = new THREE.BoxGeometry(0.6 * scale, 0.8 * scale, 0.4 * scale);
+    const body = new THREE.Mesh(bodyGeo, mat);
+    body.position.y = 0.8 * scale;
+    body.castShadow = true;
+    group.add(body);
+
+    const legGeo = new THREE.BoxGeometry(0.2 * scale, 0.6 * scale, 0.2 * scale);
+    const legL = new THREE.Mesh(legGeo, mat);
+    legL.position.set(-0.15 * scale, 0.3 * scale, 0);
+    legL.castShadow = true;
+    group.add(legL);
+
+    const legR = legL.clone();
+    legR.position.x = 0.15 * scale;
+    group.add(legR);
+
+    let hpSpriteObj = null;
+    if (scale > 1.2) {
+        hpSpriteObj = createTextSprite(`HP:${hp}`, 100, "#ffea00", "#000000");
+        const textMat = new THREE.MeshBasicMaterial({ map: hpSpriteObj.texture, transparent: true, side: THREE.DoubleSide });
+        const textGeo = new THREE.PlaneGeometry(5, 2.5);
+        const hpMesh = new THREE.Mesh(textGeo, textMat);
+        hpMesh.position.set(0, 2.2 * scale, 0);
+        group.add(hpMesh);
+    }
+
+    return { mesh: group, hpSpriteObj: hpSpriteObj };
+}
+
+// 強化・壁型の敵（Wall Enemy）の生成
+function createWallEnemyMesh(hp) {
+    const group = new THREE.Group();
+
+    const wallGeo = new THREE.BoxGeometry(3.5, 2.2, 0.8);
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x8e44ad, roughness: 0.6 });
+    const wallMesh = new THREE.Mesh(wallGeo, wallMat);
+    wallMesh.position.y = 1.1;
+    wallMesh.castShadow = true;
+    group.add(wallMesh);
+
+    const borderGeo = new THREE.BoxGeometry(3.6, 0.3, 0.85);
+    const borderMat = new THREE.MeshStandardMaterial({ color: 0x2c3e50 });
+    const topBorder = new THREE.Mesh(borderGeo, borderMat);
+    topBorder.position.y = 2.1;
+    group.add(topBorder);
+
+    const hpSpriteObj = createTextSprite(`HP:${hp}`, 100, "#00ffff", "#000000");
+    const textMat = new THREE.MeshBasicMaterial({ map: hpSpriteObj.texture, transparent: true, side: THREE.DoubleSide });
+    const textGeo = new THREE.PlaneGeometry(4.5, 2.25);
+    const hpMesh = new THREE.Mesh(textGeo, textMat);
+    hpMesh.position.set(0, 2.6, 0.1);
+    group.add(hpMesh);
+
+    return { mesh: group, hpSpriteObj: hpSpriteObj };
+}
+
+// 敵HP表示のリアルタイム更新
+function updateEnemyHpText(enemy) {
+    if (!enemy.hpSpriteObj) return;
+    const ctx = enemy.hpSpriteObj.canvas.getContext('2d');
+    ctx.clearRect(0, 0, 512, 256);
+    ctx.font = "900 100px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 16;
+    ctx.strokeText(`HP:${enemy.hp}`, 256, 128);
+
+    ctx.fillStyle = enemy.type === 'wall' ? "#00ffff" : "#ffea00";
+    ctx.fillText(`HP:${enemy.hp}`, 256, 128);
+    enemy.hpSpriteObj.texture.needsUpdate = true;
+}
+
+// 3Dゲートの生成
+function createGateMesh(type, hp) {
+    const group = new THREE.Group();
+    const frameColor = (type === 'cannon') ? 0x0078ff : 0x2ecc71;
+
+    const frameGeo = new THREE.BoxGeometry(4.5, 3.0, 0.3);
+    const frameMat = new THREE.MeshStandardMaterial({ color: frameColor, transparent: true, opacity: 0.85 });
+    const frameMesh = new THREE.Mesh(frameGeo, frameMat);
+    group.add(frameMesh);
+
+    const label = (type === 'cannon' ? '大砲+1' : '連射+') + `\n[${hp}]`;
+    const textSprite = createTextSprite(label, 70, "#ffffff", "#000000");
+
+    const textMat = new THREE.MeshBasicMaterial({ map: textSprite.texture, transparent: true });
+    const textGeo = new THREE.PlaneGeometry(5.0, 2.5);
+    const textMesh = new THREE.Mesh(textGeo, textMat);
+    textMesh.position.z = 0.18;
+    group.add(textMesh);
+
+    group.position.y = 1.5;
+    return { mesh: group, textSprite: textSprite };
+}
+
+function updateGateText(gate) {
+    const ctx = gate.textSprite.canvas.getContext('2d');
+    ctx.clearRect(0, 0, 512, 256);
+    ctx.font = "900 70px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    const label = (gate.type === 'cannon' ? '大砲+1' : '連射+') + ` [${gate.hp}]`;
+
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 14;
+    ctx.strokeText(label, 256, 128);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(label, 256, 128);
+    gate.textSprite.texture.needsUpdate = true;
+}
+
+// --- 操作処理 ---
+function onPointerMove(e) {
+    if (isGameOver) return;
+    const xRatio = (e.clientX / window.innerWidth) * 2 - 1;
+    player.x = xRatio * (fieldWidth / 2 - 1.5);
+    playerGroup.position.x = player.x;
+}
+window.addEventListener('pointermove', onPointerMove);
+
+// --- リスポーン・生成論理 ---
+function spawnGate() {
+    const type = Math.random() < 0.5 ? 'bullet' : 'cannon';
+    const hp = 5 + Math.floor(score / 5);
+    const x = (Math.random() - 0.5) * (fieldWidth - 5);
+    const gateObj = createGateMesh(type, hp);
+    gateObj.mesh.position.set(x, 1.5, -15);
+    scene.add(gateObj.mesh);
+
+    gates.push({
+        type: type,
+        hp: hp,
+        meshData: gateObj,
+        textSprite: gateObj.textSprite,
+        z: -15,
+        x: x
+    });
+}
+
+function spawnEnemyFormation() {
+    const maxCols = Math.min(5, 2 + Math.floor(score / 15));
+    let cols = Math.floor(Math.random() * 2) + (maxCols - 1);
+    cols = Math.max(2, cols);
+
+    const spacing = 1.6;
+    const startX = (Math.random() - 0.5) * (fieldWidth - cols * spacing - 2);
+
+    for (let i = 0; i < cols; i++) {
+        const posX = startX - ((cols - 1) * spacing) / 2 + i * spacing;
+        const enemyObj = createHumanMesh(0.85, 0xe67e22);
+        enemyObj.mesh.position.set(posX, 0, -15);
+        scene.add(enemyObj.mesh);
+
+        enemies.push({
+            mesh: enemyObj.mesh,
+            x: posX,
+            z: -15,
+            type: 'normal',
+            hp: 1,
+            speed: 0.1,
+            hitWidth: 0.6,
+            hitDepth: 0.6
+        });
+    }
+}
+
+// 壁敵のスポーン
+function spawnWallEnemy() {
+    const hp = 10 + Math.floor(score / 2);
+    const x = (Math.random() - 0.5) * (fieldWidth - 4);
+    const enemyObj = createWallEnemyMesh(hp);
+    enemyObj.mesh.position.set(x, 0, -15);
+    scene.add(enemyObj.mesh);
+
+    enemies.push({
+        mesh: enemyObj.mesh,
+        hpSpriteObj: enemyObj.hpSpriteObj,
+        x: x,
+        z: -15,
+        type: 'wall',
+        hp: hp,
+        speed: 0.035,
+        hitWidth: 1.8,
+        hitDepth: 0.8
+    });
+}
+
+// 大型人型敵のスポーン
+function spawnGiantHumanEnemy() {
+    const hp = 15 + Math.floor(score / 2);
+    const x = (Math.random() - 0.5) * (fieldWidth - 4);
+    const enemyObj = createHumanMesh(2.2, 0xc0392b, hp);
+    enemyObj.mesh.position.set(x, 0, -15);
+    scene.add(enemyObj.mesh);
+
+    enemies.push({
+        mesh: enemyObj.mesh,
+        hpSpriteObj: enemyObj.hpSpriteObj,
+        x: x,
+        z: -15,
+        type: 'giant',
+        hp: hp,
+        speed: 0.04,
+        hitWidth: 1.2,
+        hitDepth: 0.8
+    });
+}
+
+function restartGame() {
+    isGameOver = false;
+    score = 0;
+    frame = 0;
+    player.hp = 100;
+    player.cannons = 1;
+    player.fireRate = 16;
+    player.x = 0;
+
+    bullets.forEach(b => scene.remove(b.mesh));
+    enemies.forEach(e => scene.remove(e.mesh));
+    gates.forEach(g => scene.remove(g.meshData.mesh));
+    bullets = []; enemies = []; gates = [];
+
+    updateUI();
+    updatePlayerCannons();
+    document.getElementById('game-over').style.display = 'none';
+}
+
+function updateUI() {
+    document.getElementById('score-text').innerText = "SCORE: " + score;
+    document.getElementById('cannons-text').innerText = "CANNONS: " + player.cannons;
+    const hpText = document.getElementById('hp-text');
+    hpText.innerText = "HP: " + player.hp + " / " + player.maxHp;
+    hpText.style.color = player.hp > 30 ? "#2ecc71" : "#e74c3c";
+}
+
+// 初期化
+playerGroup.position.set(player.x, 0, player.z);
+updatePlayerCannons();
+
+// --- メインループ ---
+function animate() {
+    requestAnimationFrame(animate);
+
+    if (isGameOver) {
+        renderer.render(scene, camera);
+        return;
+    }
+
+    frame++;
+
+    // 1. 弾の発射
+    if (frame % player.fireRate === 0) {
+        const spacing = 1.2;
+        const startX = player.x - ((player.cannons - 1) * spacing) / 2;
+        for (let i = 0; i < player.cannons; i++) {
+            const bulletGeo = new THREE.SphereGeometry(0.25, 8, 8);
+            const bulletMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2 });
+            const bMesh = new THREE.Mesh(bulletGeo, bulletMat);
+            const bX = startX + i * spacing;
+            const bZ = player.z - 0.8;
+            bMesh.position.set(bX, 0.6, bZ);
+            scene.add(bMesh);
+
+            bullets.push({ mesh: bMesh, x: bX, z: bZ });
+        }
+    }
+
+    // 2. スポーン制御（通常敵、壁敵、大型人型をバランスよく生成）
+    if (frame % 45 === 0) spawnEnemyFormation();
+    if (frame % 180 === 0) spawnWallEnemy();
+    if (frame % 280 === 0) spawnGiantHumanEnemy();
+    if (frame % 220 === 0) spawnGate();
+
+    // 3. 弾の移動 & 画面外判定
+    for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        b.z -= 0.5;
+        b.mesh.position.z = b.z;
+
+        if (b.z < -16) {
+            scene.remove(b.mesh);
+            bullets.splice(i, 1);
+        }
+    }
+
+    // 4. ゲート処理
+    for (let gi = gates.length - 1; gi >= 0; gi--) {
+        const g = gates[gi];
+        g.z += 0.05;
+        g.meshData.mesh.position.z = g.z;
+
+        for (let bi = bullets.length - 1; bi >= 0; bi--) {
+            const b = bullets[bi];
+            if (Math.abs(b.x - g.x) < 2.2 && Math.abs(b.z - g.z) < 0.5) {
+                g.hp--;
+                scene.remove(b.mesh);
+                bullets.splice(bi, 1);
+                updateGateText(g);
+
+                if (g.hp <= 0) {
+                    if (g.type === 'cannon' && player.cannons < 6) {
+                        player.cannons++;
+                        updatePlayerCannons();
+                    } else if (g.type === 'bullet' && player.fireRate > 3) {
+                        player.fireRate -= 3;
+                    }
+                    scene.remove(g.meshData.mesh);
+                    gates.splice(gi, 1);
+                    updateUI();
+                    break;
+                }
+            }
+        }
+
+        if (g && g.z > player.z) {
+            scene.remove(g.meshData.mesh);
+            gates.splice(gi, 1);
+        }
+    }
+
+    // 5. 敵処理（フリーズ防止のため安全な配列ループ構造に修正）
+    for (let ei = enemies.length - 1; ei >= 0; ei--) {
+        const e = enemies[ei];
+        e.z += e.speed;
+        e.mesh.position.z = e.z;
+
+        let enemyDestroyed = false;
+
+        // 弾との判定
+        for (let bi = bullets.length - 1; bi >= 0; bi--) {
+            const b = bullets[bi];
+
+            if (Math.abs(b.x - e.x) < e.hitWidth && Math.abs(b.z - e.z) < e.hitDepth) {
+                e.hp--;
+                scene.remove(b.mesh);
+                bullets.splice(bi, 1);
+
+                if (e.type !== 'normal') {
+                    updateEnemyHpText(e);
+                }
+
+                if (e.hp <= 0) {
+                    score += e.type === 'normal' ? 1 : (e.type === 'wall' ? 10 : 15);
+                    scene.remove(e.mesh);
+                    enemies.splice(ei, 1);
+                    updateUI();
+                    enemyDestroyed = true;
+                    break;
+                }
+            }
+        }
+
+        if (enemyDestroyed) continue;
+
+        // 防衛線突破判定
+        if (e.z > 12) {
+            player.hp -= e.hp;
+            scene.remove(e.mesh);
+            enemies.splice(ei, 1);
+            updateUI();
+
+            if (player.hp <= 0) {
+                player.hp = 0;
+                isGameOver = true;
+                document.getElementById('final-score').innerText = "Final Score: " + score;
+                document.getElementById('game-over').style.display = 'flex';
+            }
+        }
+    }
+
+    renderer.render(scene, camera);
+}
+
+document.getElementById('game-over').addEventListener('click', restartGame);
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+animate();
+</script>
+</body>
+</html>
