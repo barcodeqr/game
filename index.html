@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D防衛ゲーム</title>
+    <title>3D 武器防衛ゲーム</title>
     <style>
         body { margin: 0; overflow: hidden; background: #1a1a1a; font-family: sans-serif; user-select: none; }
         #canvas-container { width: 100vw; height: 100vh; display: block; }
@@ -325,9 +325,9 @@ function updateEnemyHpText(enemy) {
 function getGateLabelPrefix(type) {
     if (type === 'rapid') return '速射';
     if (type === 'plus') return '武器';
-    if (type === 'cannon') return '大砲へ';
-    if (type === 'laser') return 'レーザーへ';
-    if (type === 'missile') return 'ミサイルへ';
+    if (type === 'cannon') return '大砲';
+    if (type === 'laser') return 'レーザー';
+    if (type === 'missile') return 'ミサイル';
     return '耐久';
 }
 
@@ -335,22 +335,22 @@ function createHeartMesh() {
     const group = new THREE.Group();
     const mat = new THREE.MeshStandardMaterial({ color: 0xe74c3c, emissive: 0xc0392b, roughness: 0.3 });
     
-    const sphereGeo = new THREE.SphereGeometry(0.25, 8, 8);
+    const sphereGeo = new THREE.SphereGeometry(0.35, 8, 8);
     const lSphere = new THREE.Mesh(sphereGeo, mat);
-    lSphere.position.set(-0.15, 0.2, 0);
+    lSphere.position.set(-0.2, 0.25, 0);
     group.add(lSphere);
 
     const rSphere = new THREE.Mesh(sphereGeo, mat);
-    rSphere.position.set(0.15, 0.2, 0);
+    rSphere.position.set(0.2, 0.25, 0);
     group.add(rSphere);
 
-    const coneGeo = new THREE.ConeGeometry(0.35, 0.7, 8);
+    const coneGeo = new THREE.ConeGeometry(0.5, 0.9, 8);
     const cone = new THREE.Mesh(coneGeo, mat);
     cone.rotation.x = Math.PI;
-    cone.position.set(0, -0.15, 0);
+    cone.position.set(0, -0.2, 0);
     group.add(cone);
 
-    group.scale.set(0.6, 0.6, 0.6);
+    group.scale.set(0.85, 0.85, 0.85); // 少し大きめに調整
     return group;
 }
 
@@ -466,7 +466,6 @@ function spawnGate() {
     const rand = Math.random();
     let type, label, hp;
 
-    // HPが30以下（赤くなる状態）のときはハートの出現確率を大幅にアップ（例: 50%）
     let heartChance = player.hp <= 30 ? 0.5 : 0.2;
 
     if (rand < heartChance) {
@@ -474,7 +473,6 @@ function spawnGate() {
         hp = 1;
         label = '';
     } else {
-        // 最初（スコアが低い時）は速射が出やすくなるよう調整
         let rapidChance = (score < 150) ? 0.65 : 0.35;
 
         if (player.cannons < 4) {
@@ -487,13 +485,13 @@ function spawnGate() {
             }
         } else {
             if (player.weaponType === 'gun') {
-                type = 'cannon'; label = '大砲へ';
+                type = 'cannon'; label = '大砲';
                 hp = 15 + Math.floor(score / 5);
             } else if (player.weaponType === 'cannon' && rand < 0.4) {
-                type = 'laser'; label = 'レーザーへ';
+                type = 'laser'; label = 'レーザー';
                 hp = 20 + Math.floor(score / 5);
             } else if (player.weaponType === 'laser' && rand < 0.6) {
-                type = 'missile'; label = 'ミサイルへ';
+                type = 'missile'; label = 'ミサイル';
                 hp = 25 + Math.floor(score / 5);
             } else if (player.rapidLevel < 8 && Math.random() < rapidChance) {
                 type = 'rapid'; label = '速射';
