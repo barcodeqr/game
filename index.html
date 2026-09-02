@@ -29,8 +29,9 @@
     <div id="ui">
         <div id="score-text">SCORE: 0</div>
         <div id="weapon-text">WEAPON: 鉄砲 (威力:1)</div>
-        <div id="cannons-text">CANNONS: 1 / 4 (MAX)</div>
-        <div id="hp-text" style="color:#2ecc71;">HP: 100 / 100</div>
+        <div id="rapid-text">速射レベル: 1 / 8</div>
+        <div id="cannons-text">武器台数: 1 / 4 (MAX)</div>
+        <div id="hp-text" style="color:#2ecc71; font-size: 20px; margin-top: 6px; white-space: nowrap;">HP: 125 / 125</div>
     </div>
     <div id="game-over">
         <h1 style="font-size: 40px; margin: 0;">GAME OVER</h1>
@@ -40,10 +41,9 @@
     </div>
 
 <script>
-// --- 基本セットアップ ---
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x7ec0ee); // 爽やかな青空
+scene.background = new THREE.Color(0x7ec0ee);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(0, 35, 25);
@@ -54,7 +54,6 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 container.appendChild(renderer.domElement);
 
-// --- ライティング ---
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
 scene.add(ambientLight);
 
@@ -63,7 +62,6 @@ dirLight.position.set(20, 40, 20);
 dirLight.castShadow = true;
 scene.add(dirLight);
 
-// --- テクスチャ生成ヘルパー ---
 function createRealisticGrassTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = 512; canvas.height = 512;
@@ -108,10 +106,9 @@ function createRealisticDirtTexture() {
     return texture;
 }
 
-// --- フィールド & 3つのレーン ---
 const fieldLength = 32;
 const laneWidth = 5;
-const laneCenterPositions = [-5.5, 0, 5.5]; // 0:左, 1:中央, 2:右
+const laneCenterPositions = [-5.5, 0, 5.5];
 
 const outerGroundGeo = new THREE.PlaneGeometry(200, 200);
 const outerGroundMat = new THREE.MeshStandardMaterial({ map: createRealisticGrassTexture(), roughness: 0.9 });
@@ -152,25 +149,23 @@ laneCenterPositions.forEach(x => {
     scene.add(defenseLine);
 });
 
-// --- ゲーム変数 ---
 let isGameOver = false;
 let score = 0;
 let frame = 0;
 
-let nextCenterSpawnTimer = 80;
-let nextRightSpawnTimer = 500;
-let nextLeftSpawnTimer = 400;
+let nextCenterSpawnTimer = 150;
+let nextRightSpawnTimer = 600;
+let nextLeftSpawnTimer = 500;
 
 let player = {
-    laneIndex: 1,      
-    subPosition: 1,    
+    targetX: 0,
     x: 0,
-    z: 13,             
-    hp: 100,
-    maxHp: 100,
-    cannons: 1,        // MAX 4
-    fireRate: 15,      
-    weaponType: 'gun'  // 'gun' (鉄砲), 'cannon' (大砲), 'laser' (レーザー)
+    z: 13,
+    hp: 125,
+    maxHp: 125,
+    cannons: 1,
+    rapidLevel: 1,
+    weaponType: 'gun'
 };
 
 let playerGroup = new THREE.Group();
@@ -180,7 +175,6 @@ let bullets = [];
 let enemies = [];
 let gates = [];
 
-// --- テクスチャ・文字用描画ヘルパー ---
 function createTextSprite(text, fontSize = 90, textColor = "#ffff00", strokeColor = "#000000") {
     const canvas = document.createElement('canvas');
     canvas.width = 512; 
@@ -205,7 +199,6 @@ function createTextSprite(text, fontSize = 90, textColor = "#ffff00", strokeColo
     return { canvas, texture };
 }
 
-// 武器に応じた見た目の砲台生成
 function createWeaponMesh(weaponType) {
     const group = new THREE.Group();
 
@@ -234,6 +227,14 @@ function createWeaponMesh(weaponType) {
             barrel.position.set(ox, 0.6, 0);
             group.add(barrel);
         });
+    } else if (weaponType === 'missile') {
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0xe74c3c, metalness: 0.7 });
+        const bodyGeo = new THREE.ConeGeometry(0.25, 1.4, 8);
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.rotation.x = -Math.PI / 3;
+        body.position.y = 0.6;
+        body.castShadow = true;
+        group.add(body);
     }
 
     const baseGeo = new THREE.BoxGeometry(1, 0.4, 1.2);
@@ -259,18 +260,15 @@ function updatePlayercannons() {
     }
 }
 
-function updatePlayerPosition() {
-    const baseLaneX = laneCenterPositions[player.laneIndex];
-    const subOffsets = [-1.4, 0, 1.4];
-    player.x = baseLaneX + subOffsets[player.subPosition];
-    playerGroup.position.x = player.x;
-    playerGroup.position.z = player.z;
+function createZombieColor() {
+    const zombieColors = [0x4a6b41, 0x556b2f, 0x3b5323, 0x5c6f68, 0x4f4f4f];
+    return zombieColors[Math.floor(Math.random() * zombieColors.length)];
 }
 
-// 3D人型生成
-function createHumanMesh(scale, color, hp = 1) {
+function createHumanMesh(scale, colorOverride, hp = 1) {
     const group = new THREE.Group();
-    const mat = new THREE.MeshStandardMaterial({ color: color });
+    const color = colorOverride !== null ? colorOverride : createZombieColor();
+    const mat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.8 });
 
     const headGeo = new THREE.SphereGeometry(0.4 * scale, 12, 12);
     const head = new THREE.Mesh(headGeo, mat);
@@ -324,45 +322,114 @@ function updateEnemyHpText(enemy) {
     enemy.hpSpriteObj.texture.needsUpdate = true;
 }
 
-// --- ゲートの生成 ---
+function getGateLabelPrefix(type) {
+    if (type === 'rapid') return '速射';
+    if (type === 'plus') return '武器';
+    if (type === 'cannon') return '大砲へ';
+    if (type === 'laser') return 'レーザーへ';
+    if (type === 'missile') return 'ミサイルへ';
+    return '耐久';
+}
+
+function createHeartMesh() {
+    const group = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color: 0xe74c3c, emissive: 0xc0392b, roughness: 0.3 });
+    
+    // ハートを形作るための簡易ジオメトリ（小さな球体とボックスの組み合わせ）
+    const sphereGeo = new THREE.SphereGeometry(0.25, 8, 8);
+    const lSphere = new THREE.Mesh(sphereGeo, mat);
+    lSphere.position.set(-0.15, 0.2, 0);
+    group.add(lSphere);
+
+    const rSphere = new THREE.Mesh(sphereGeo, mat);
+    rSphere.position.set(0.15, 0.2, 0);
+    group.add(rSphere);
+
+    const coneGeo = new THREE.ConeGeometry(0.35, 0.7, 8);
+    const cone = new THREE.Mesh(coneGeo, mat);
+    cone.rotation.x = Math.PI;
+    cone.position.set(0, -0.15, 0);
+    group.add(cone);
+
+    group.scale.set(0.6, 0.6, 0.6); // 小人の大きさに設定
+    return group;
+}
+
 function createGateMesh(hp, type, label) {
     const group = new THREE.Group();
 
-    let dummyWeapon = 'gun';
-    if (type === 'cannon') dummyWeapon = 'cannon';
-    if (type === 'laser') dummyWeapon = 'laser';
-    if (type === 'plus') dummyWeapon = player.weaponType;
+    if (type === 'heart') {
+        const heartGroup = createHeartMesh();
+        group.add(heartGroup);
+        return { mesh: group, type: type };
+    }
 
-    const model = createWeaponMesh(dummyWeapon);
-    model.scale.set(2.2, 2.2, 2.2);
-    model.position.y = 0.2;
-    group.add(model);
+    if (type === 'plus') {
+        const model1 = createWeaponMesh(player.weaponType);
+        model1.scale.set(1.0, 1.0, 1.0);
+        model1.position.set(-0.4, 0.1, 0);
+        model1.rotation.y = Math.PI / 2;
+        group.add(model1);
 
-    const labelText = `${label}\n[${hp}]`;
-    const textColor = type === 'laser' ? "#9b59b6" : (type === 'cannon' ? "#e67e22" : "#00ffff");
+        const model2 = createWeaponMesh(player.weaponType);
+        model2.scale.set(1.0, 1.0, 1.0);
+        model2.position.set(0.4, 0.1, 0.3);
+        model2.rotation.y = Math.PI / 2;
+        group.add(model2);
+    } else {
+        let dummyWeapon = 'gun';
+        if (type === 'cannon') dummyWeapon = 'cannon';
+        if (type === 'laser') dummyWeapon = 'laser';
+        if (type === 'missile') dummyWeapon = 'missile';
+        if (type === 'rapid') dummyWeapon = 'gun';
 
-    const textSprite = createTextSprite(labelText, 80, textColor, "#000000");
+        const model = createWeaponMesh(dummyWeapon);
+        model.scale.set(1.2, 1.2, 1.2);
+        model.position.y = 0.1;
+        model.rotation.y = Math.PI / 2;
+        group.add(model);
+    }
+
+    const prefix = getGateLabelPrefix(type);
+    const labelText = `${prefix}: ${hp}`;
+    
+    let textColor = "#00ffff";
+    if (type === 'laser') textColor = "#9b59b6";
+    else if (type === 'cannon') textColor = "#e67e22";
+    else if (type === 'missile') textColor = "#e74c3c";
+    else if (type === 'rapid') textColor = "#00ffff";
+    else if (type === 'plus') textColor = "#2ecc71";
+
+    const textSprite = createTextSprite(labelText, 140, textColor, "#000000");
     const textMat = new THREE.MeshBasicMaterial({ map: textSprite.texture, transparent: true });
-    const textGeo = new THREE.PlaneGeometry(5.8, 2.8);
+    const textGeo = new THREE.PlaneGeometry(5.0, 2.5);
     const textMesh = new THREE.Mesh(textGeo, textMat);
-    textMesh.position.set(0, 2.8, 0);
+    textMesh.position.set(0, 2.2, 0);
     group.add(textMesh);
 
-    return { mesh: group, textSprite: textSprite };
+    return { mesh: group, textSprite: textSprite, type: type };
 }
 
 function updateGateText(gate) {
+    if (gate.type === 'heart') return;
     const ctx = gate.textSprite.canvas.getContext('2d');
     ctx.clearRect(0, 0, 512, 256);
-    ctx.font = "900 80px sans-serif";
+    ctx.font = "900 140px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
 
-    const labelText = `${gate.label} [${gate.hp}]`;
-    const textColor = gate.type === 'laser' ? "#9b59b6" : (gate.type === 'cannon' ? "#e67e22" : "#00ffff");
+    const prefix = getGateLabelPrefix(gate.type);
+    const labelText = `${prefix}: ${gate.hp}`;
+    
+    let textColor = "#00ffff";
+    if (gate.type === 'laser') textColor = "#9b59b6";
+    else if (gate.type === 'cannon') textColor = "#e67e22";
+    else if (gate.type === 'missile') textColor = "#e74c3c";
+    else if (gate.type === 'rapid') textColor = "#00ffff";
+    else if (gate.type === 'plus') textColor = "#2ecc71";
 
     ctx.strokeStyle = "#000000";
-    ctx.lineWidth = 16;
+    ctx.lineWidth = 18;
     ctx.strokeText(labelText, 256, 128);
     ctx.fillStyle = textColor;
     ctx.fillText(labelText, 256, 128);
@@ -370,43 +437,66 @@ function updateGateText(gate) {
     gate.textSprite.texture.needsUpdate = true;
 }
 
-// --- 操作処理 ---
 function handleInput(clientX) {
     if (isGameOver) return;
     const xRatio = clientX / window.innerWidth;
 
-    if (xRatio < 0.11) { player.laneIndex = 0; player.subPosition = 0; }
-    else if (xRatio < 0.22) { player.laneIndex = 0; player.subPosition = 1; }
-    else if (xRatio < 0.33) { player.laneIndex = 0; player.subPosition = 2; }
-    else if (xRatio < 0.44) { player.laneIndex = 1; player.subPosition = 0; }
-    else if (xRatio < 0.55) { player.laneIndex = 1; player.subPosition = 1; }
-    else if (xRatio < 0.66) { player.laneIndex = 1; player.subPosition = 2; }
-    else if (xRatio < 0.77) { player.laneIndex = 2; player.subPosition = 0; }
-    else if (xRatio < 0.88) { player.laneIndex = 2; player.subPosition = 1; }
-    else { player.laneIndex = 2; player.subPosition = 2; }
+    let targetLaneIndex = 1;
+    let subPosition = 1;
 
-    updatePlayerPosition();
+    if (xRatio < 0.33) { targetLaneIndex = 0; }
+    else if (xRatio < 0.66) { targetLaneIndex = 1; }
+    else { targetLaneIndex = 2; }
+
+    const subRatio = (xRatio % 0.33) / 0.33;
+    if (subRatio < 0.33) { subPosition = 0; }
+    else if (subRatio < 0.66) { subPosition = 1; }
+    else { subPosition = 2; }
+
+    const baseLaneX = laneCenterPositions[targetLaneIndex];
+    const subOffsets = [-1.4, 0, 1.4];
+    player.targetX = baseLaneX + subOffsets[subPosition];
 }
 
 window.addEventListener('pointermove', (e) => handleInput(e.clientX));
-window.addEventListener('touchmove', (e) => {
-    if (e.touches.length > 0) handleInput(e.touches[0].clientX);
-}, { passive: true });
 
-// --- スポーン関数 ---
 function spawnGate() {
-    const hp = 15 + Math.floor(score / 3);
     const laneIdx = 0;
     const x = laneCenterPositions[laneIdx];
     
     const rand = Math.random();
-    let type, label;
-    if (player.weaponType === 'gun') {
-        type = 'cannon'; label = '大砲へ変更';
-    } else if (player.weaponType === 'cannon' && rand < 0.5) {
-        type = 'laser'; label = 'レーザーへ変更';
+    let type, label, hp;
+
+    // 時々ハートを流す (確率 20%)
+    if (rand < 0.2) {
+        type = 'heart';
+        hp = 1;
+        label = '';
+    } else if (player.cannons < 4) {
+        if (player.rapidLevel < 8 && rand < 0.6) {
+            type = 'rapid'; label = '速射';
+            hp = player.cannons === 1 ? Math.min(3, Math.max(2, 2 + Math.floor(score / 100))) : (15 + Math.floor(score / 5));
+        } else {
+            type = 'plus'; label = '武器';
+            hp = 15 + Math.floor(score / 5);
+        }
     } else {
-        type = 'plus'; label = '大砲+1';
+        if (player.weaponType === 'gun') {
+            type = 'cannon'; label = '大砲へ';
+            hp = 15 + Math.floor(score / 5);
+        } else if (player.weaponType === 'cannon' && rand < 0.4) {
+            type = 'laser'; label = 'レーザーへ';
+            hp = 20 + Math.floor(score / 5);
+        } else if (player.weaponType === 'laser' && rand < 0.6) {
+            type = 'missile'; label = 'ミサイルへ';
+            hp = 25 + Math.floor(score / 5);
+        } else if (player.rapidLevel < 8 && rand < 0.8) {
+            type = 'rapid'; label = '速射';
+            hp = 15 + Math.floor(score / 5);
+        } else {
+            type = 'plus'; label = '武器';
+            hp = 15 + Math.floor(score / 5);
+        }
     }
 
     const gateObj = createGateMesh(hp, type, label);
@@ -429,14 +519,24 @@ function spawnEnemyFormation() {
     const baseLaneX = laneCenterPositions[laneIdx];
     const offsets = [-1.4, 0, 1.4];
 
-    let totalRows = score < 100 ? Math.floor(Math.random() * 4) + 2 : Math.floor(Math.random() * 12) + 4;
+    let totalRows;
+    if (score <= 300) {
+        totalRows = Math.floor(Math.random() * 2) + 1; 
+    } else if (score <= 600) {
+        totalRows = Math.floor(Math.random() * 3) + 2; 
+    } else if (score <= 1000) {
+        totalRows = Math.floor(Math.random() * 5) + 3; 
+    } else {
+        totalRows = Math.floor(Math.random() * 8) + 5; 
+    }
+
     const rowSpacing = 1.3;
 
     for (let r = 0; r < totalRows; r++) {
         const startZ = -15 - (r * rowSpacing);
         offsets.forEach(offsetX => {
             const posX = baseLaneX + offsetX;
-            const enemyObj = createHumanMesh(0.65, 0xe67e22); 
+            const enemyObj = createHumanMesh(0.65, null);
             enemyObj.mesh.position.set(posX, 0, startZ);
             scene.add(enemyObj.mesh);
 
@@ -446,7 +546,7 @@ function spawnEnemyFormation() {
                 z: startZ,
                 type: 'normal',
                 hp: 1,
-                speed: 0.08,
+                speed: 0.07,
                 hitWidth: 0.7, 
                 hitDepth: 0.7
             });
@@ -455,10 +555,10 @@ function spawnEnemyFormation() {
 }
 
 function spawnGiantHumanEnemy() {
-    const hp = 20 + Math.floor(score / 2);
+    const hp = 15 + Math.floor(score / 3);
     const laneIdx = 2;
     const x = laneCenterPositions[laneIdx];
-    const enemyObj = createHumanMesh(2.0, 0xc0392b, hp);
+    const enemyObj = createHumanMesh(2.0, 0x3d4e38, hp);
     enemyObj.mesh.position.set(x, 0, -15);
     scene.add(enemyObj.mesh);
 
@@ -469,7 +569,7 @@ function spawnGiantHumanEnemy() {
         z: -15,
         type: 'giant',
         hp: hp,
-        speed: 0.04,
+        speed: 0.035,
         hitWidth: 1.5,
         hitDepth: 0.8
     });
@@ -479,15 +579,15 @@ function restartGame() {
     isGameOver = false;
     score = 0;
     frame = 0;
-    nextCenterSpawnTimer = 80;
-    nextRightSpawnTimer = 500;
-    nextLeftSpawnTimer = 400;
-    player.hp = 100;
+    nextCenterSpawnTimer = 150;
+    nextRightSpawnTimer = 600;
+    nextLeftSpawnTimer = 500;
+    player.hp = 125;
     player.cannons = 1;
+    player.rapidLevel = 1;
     player.weaponType = 'gun';
-    player.laneIndex = 1;
-    player.subPosition = 1;
-    updatePlayerPosition();
+    player.targetX = 0;
+    player.x = 0;
 
     bullets.forEach(b => scene.remove(b.mesh));
     enemies.forEach(e => scene.remove(e.mesh));
@@ -505,19 +605,23 @@ function updateUI() {
     let weaponName = "鉄砲 (威力:1)";
     if (player.weaponType === 'cannon') weaponName = "大砲 (威力:2)";
     if (player.weaponType === 'laser') weaponName = "レーザー (威力:3)";
+    if (player.weaponType === 'missile') weaponName = "ミサイル (威力:4)";
     document.getElementById('weapon-text').innerText = "WEAPON: " + weaponName;
     
-    document.getElementById('cannons-text').innerText = "CANNONS: " + player.cannons + " / 4 (MAX)";
+    document.getElementById('rapid-text').innerText = "速射レベル: " + player.rapidLevel + " / 8";
+    document.getElementById('cannons-text').innerText = "武器台数: " + player.cannons + " / 4 (MAX)";
+    
     const hpText = document.getElementById('hp-text');
     hpText.innerText = "HP: " + player.hp + " / " + player.maxHp;
     hpText.style.color = player.hp > 30 ? "#2ecc71" : "#e74c3c";
 }
 
-// 初期化
-updatePlayerPosition();
+player.x = 0;
+player.targetX = 0;
+playerGroup.position.x = player.x;
+playerGroup.position.z = player.z;
 updatePlayercannons();
 
-// --- メインループ ---
 function animate() {
     requestAnimationFrame(animate);
 
@@ -528,7 +632,12 @@ function animate() {
 
     frame++;
 
-    if (frame % player.fireRate === 0) {
+    player.x += (player.targetX - player.x) * 0.2;
+    playerGroup.position.x = player.x;
+    playerGroup.position.z = player.z;
+
+    const fireInterval = Math.max(6, 22 - (player.rapidLevel * 2));
+    if (frame % fireInterval === 0) {
         const spacing = 1.1;
         const startX = player.x - ((player.cannons - 1) * spacing) / 2;
         for (let i = 0; i < player.cannons; i++) {
@@ -536,7 +645,15 @@ function animate() {
             const bZ = player.z - 0.8;
             let bMesh, bulletData;
 
-            if (player.weaponType === 'laser') {
+            if (player.weaponType === 'missile') {
+                const missileGeo = new THREE.ConeGeometry(0.12, 0.8, 8);
+                const missileMat = new THREE.MeshBasicMaterial({ color: 0xe74c3c });
+                bMesh = new THREE.Mesh(missileGeo, missileMat);
+                bMesh.rotation.x = Math.PI / 2;
+                bMesh.position.set(bX, 0.6, bZ);
+                scene.add(bMesh);
+                bulletData = { mesh: bMesh, x: bX, z: bZ, damage: 4, type: 'missile' };
+            } else if (player.weaponType === 'laser') {
                 const laserGeo = new THREE.BoxGeometry(0.1, 0.1, 1.2);
                 const laserMat = new THREE.MeshBasicMaterial({ color: 0x9b59b6 });
                 bMesh = new THREE.Mesh(laserGeo, laserMat);
@@ -563,27 +680,38 @@ function animate() {
         }
     }
 
+    let centerSpawnInterval;
+    if (score <= 300) {
+        centerSpawnInterval = 180; 
+    } else if (score <= 600) {
+        centerSpawnInterval = 110; 
+    } else if (score <= 1000) {
+        centerSpawnInterval = 80;  
+    } else {
+        centerSpawnInterval = 50;  
+    }
+
     nextCenterSpawnTimer--;
     if (nextCenterSpawnTimer <= 0) {
         spawnEnemyFormation();
-        nextCenterSpawnTimer = Math.floor(Math.random() * 50) + (score < 100 ? 120 : 70); 
+        nextCenterSpawnTimer = centerSpawnInterval + Math.floor(Math.random() * 40); 
     }
 
     nextRightSpawnTimer--;
     if (nextRightSpawnTimer <= 0) {
         spawnGiantHumanEnemy();
-        nextRightSpawnTimer = Math.floor(Math.random() * 250) + 300;
+        nextRightSpawnTimer = Math.max(200, 500 - Math.floor(score / 3));
     }
 
     nextLeftSpawnTimer--;
     if (nextLeftSpawnTimer <= 0) {
         spawnGate();
-        nextLeftSpawnTimer = Math.floor(Math.random() * 300) + 300;
+        nextLeftSpawnTimer = Math.floor(Math.random() * 150) + 350;
     }
 
     for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
-        b.z -= (b.type === 'laser' ? 0.8 : 0.5);
+        b.z -= (b.type === 'laser' || b.type === 'missile' ? 0.8 : 0.5);
         b.mesh.position.z = b.z;
 
         if (b.z < -35) {
@@ -606,12 +734,22 @@ function animate() {
                 updateGateText(g);
 
                 if (g.hp <= 0) {
-                    if (g.type === 'cannon') {
+                    if (g.type === 'heart') {
+                        player.hp = Math.min(player.maxHp, player.hp + 30);
+                    } else if (g.type === 'cannon') {
                         player.weaponType = 'cannon';
+                        player.cannons = 2; // 変更時に2台にリセット
                         updatePlayercannons();
                     } else if (g.type === 'laser') {
                         player.weaponType = 'laser';
+                        player.cannons = 2; // 変更時に2台にリセット
                         updatePlayercannons();
+                    } else if (g.type === 'missile') {
+                        player.weaponType = 'missile';
+                        player.cannons = 2; // 変更時に2台にリセット
+                        updatePlayercannons();
+                    } else if (g.type === 'rapid') {
+                        if (player.rapidLevel < 8) player.rapidLevel++;
                     } else if (g.type === 'plus') {
                         if (player.cannons < 4) player.cannons++;
                         updatePlayercannons();
@@ -666,6 +804,14 @@ function animate() {
             player.hp -= e.hp;
             scene.remove(e.mesh);
             enemies.splice(ei, 1);
+
+            if (e.type === 'giant') {
+                if (player.cannons > 1) {
+                    player.cannons--;
+                    updatePlayercannons();
+                }
+            }
+
             updateUI();
 
             if (player.hp <= 0) {
