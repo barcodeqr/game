@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 武器選択式防衛ゲーム</title>
+    <title>3D防衛ゲーム</title>
     <style>
         body { margin: 0; overflow: hidden; background: #1a1a1a; font-family: sans-serif; user-select: none; }
         #canvas-container { width: 100vw; height: 100vh; display: block; }
@@ -27,15 +27,15 @@
 
     <div id="canvas-container"></div>
     <div id="ui">
-        <div id="score-text">SCORE: 0[cite: 3]</div>
+        <div id="score-text">SCORE: 0</div>
         <div id="weapon-text">WEAPON: 鉄砲 (威力:1)</div>
-        <div id="cannons-text">CANNONS: 1 / 4 (MAX)[cite: 3]</div>
-        <div id="hp-text" style="color:#2ecc71;">HP: 100 / 100[cite: 3]</div>
+        <div id="cannons-text">CANNONS: 1 / 4 (MAX)</div>
+        <div id="hp-text" style="color:#2ecc71;">HP: 100 / 100</div>
     </div>
     <div id="game-over">
         <h1 style="font-size: 40px; margin: 0;">GAME OVER</h1>
         <p style="color:#fff; font-size:18px;">防衛線が突破された！</p>
-        <p id="final-score" style="color:#fff; font-size:18px;">Final Score: 0[cite: 3]</p>
+        <p id="final-score" style="color:#fff; font-size:18px;">Final Score: 0</p>
         <p style="color:#aaa; font-size:14px; margin-top:20px;">画面をタップ/クリックで再挑戦</p>
     </div>
 
@@ -168,7 +168,7 @@ let player = {
     z: 13,             
     hp: 100,
     maxHp: 100,
-    cannons: 1,        // MAX 4[cite: 3]
+    cannons: 1,        // MAX 4
     fireRate: 15,      
     weaponType: 'gun'  // 'gun' (鉄砲), 'cannon' (大砲), 'laser' (レーザー)
 };
@@ -210,7 +210,6 @@ function createWeaponMesh(weaponType) {
     const group = new THREE.Group();
 
     if (weaponType === 'gun') {
-        // 鉄砲（細身の銃身）
         const bodyGeo = new THREE.CylinderGeometry(0.12, 0.15, 1.2, 8);
         const bodyMat = new THREE.MeshStandardMaterial({ color: 0x7f8c8d, metalness: 0.8 });
         const body = new THREE.Mesh(bodyGeo, bodyMat);
@@ -219,7 +218,6 @@ function createWeaponMesh(weaponType) {
         body.castShadow = true;
         group.add(body);
     } else if (weaponType === 'cannon') {
-        // 大砲（従来のデザイン）
         const bodyGeo = new THREE.CylinderGeometry(0.3, 0.4, 1.5, 12);
         const bodyMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.3 });
         const body = new THREE.Mesh(bodyGeo, bodyMat);
@@ -228,7 +226,6 @@ function createWeaponMesh(weaponType) {
         body.castShadow = true;
         group.add(body);
     } else if (weaponType === 'laser') {
-        // レーザー（近未来的なデュアル砲身）
         const bodyMat = new THREE.MeshStandardMaterial({ color: 0x9b59b6, emissive: 0x8e44ad, metalness: 0.9 });
         [-0.2, 0.2].forEach(ox => {
             const barrelGeo = new THREE.CylinderGeometry(0.15, 0.15, 1.6, 8);
@@ -327,7 +324,7 @@ function updateEnemyHpText(enemy) {
     enemy.hpSpriteObj.texture.needsUpdate = true;
 }
 
-// --- ゲートの生成（武器変更・強化用） ---
+// --- ゲートの生成 ---
 function createGateMesh(hp, type, label) {
     const group = new THREE.Group();
 
@@ -402,7 +399,6 @@ function spawnGate() {
     const laneIdx = 0;
     const x = laneCenterPositions[laneIdx];
     
-    // ランダムでゲートの種類を決定 (大砲、レーザー、大砲+1など)
     const rand = Math.random();
     let type, label;
     if (player.weaponType === 'gun') {
@@ -504,16 +500,16 @@ function restartGame() {
 }
 
 function updateUI() {
-    document.getElementById('score-text').innerText = "SCORE: " + score;[cite: 3]
+    document.getElementById('score-text').innerText = "SCORE: " + score;
     
     let weaponName = "鉄砲 (威力:1)";
     if (player.weaponType === 'cannon') weaponName = "大砲 (威力:2)";
     if (player.weaponType === 'laser') weaponName = "レーザー (威力:3)";
     document.getElementById('weapon-text').innerText = "WEAPON: " + weaponName;
     
-    document.getElementById('cannons-text').innerText = "CANNONS: " + player.cannons + " / 4 (MAX)";[cite: 3]
+    document.getElementById('cannons-text').innerText = "CANNONS: " + player.cannons + " / 4 (MAX)";
     const hpText = document.getElementById('hp-text');
-    hpText.innerText = "HP: " + player.hp + " / " + player.maxHp;[cite: 3]
+    hpText.innerText = "HP: " + player.hp + " / " + player.maxHp;
     hpText.style.color = player.hp > 30 ? "#2ecc71" : "#e74c3c";
 }
 
@@ -532,7 +528,6 @@ function animate() {
 
     frame++;
 
-    // 1. 弾の発射
     if (frame % player.fireRate === 0) {
         const spacing = 1.1;
         const startX = player.x - ((player.cannons - 1) * spacing) / 2;
@@ -542,7 +537,6 @@ function animate() {
             let bMesh, bulletData;
 
             if (player.weaponType === 'laser') {
-                // レーザー（細い線状）
                 const laserGeo = new THREE.BoxGeometry(0.1, 0.1, 1.2);
                 const laserMat = new THREE.MeshBasicMaterial({ color: 0x9b59b6 });
                 bMesh = new THREE.Mesh(laserGeo, laserMat);
@@ -550,7 +544,6 @@ function animate() {
                 scene.add(bMesh);
                 bulletData = { mesh: bMesh, x: bX, z: bZ, damage: 3, type: 'laser' };
             } else if (player.weaponType === 'cannon') {
-                // 大砲の玉（通常丸形、威力2）
                 const bulletGeo = new THREE.SphereGeometry(0.25, 8, 8);
                 const bulletMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
                 bMesh = new THREE.Mesh(bulletGeo, bulletMat);
@@ -558,7 +551,6 @@ function animate() {
                 scene.add(bMesh);
                 bulletData = { mesh: bMesh, x: bX, z: bZ, damage: 2, type: 'cannon' };
             } else {
-                // 鉄砲の玉（小さい丸形、威力1）
                 const bulletGeo = new THREE.SphereGeometry(0.12, 8, 8);
                 const bulletMat = new THREE.MeshStandardMaterial({ color: 0x7f8c8d });
                 bMesh = new THREE.Mesh(bulletGeo, bulletMat);
@@ -571,7 +563,6 @@ function animate() {
         }
     }
 
-    // 2. スポーン制御
     nextCenterSpawnTimer--;
     if (nextCenterSpawnTimer <= 0) {
         spawnEnemyFormation();
@@ -590,7 +581,6 @@ function animate() {
         nextLeftSpawnTimer = Math.floor(Math.random() * 300) + 300;
     }
 
-    // 3. 弾の移動
     for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
         b.z -= (b.type === 'laser' ? 0.8 : 0.5);
@@ -602,7 +592,6 @@ function animate() {
         }
     }
 
-    // 4. ゲート処理
     for (let gi = gates.length - 1; gi >= 0; gi--) {
         const g = gates[gi];
         g.z += 0.05;
@@ -611,7 +600,7 @@ function animate() {
         for (let bi = bullets.length - 1; bi >= 0; bi--) {
             const b = bullets[bi];
             if (Math.abs(b.x - g.x) < 2.5 && Math.abs(b.z - g.z) < 1.0) {
-                g.hp -= b.damage; // 武器の威力分削る
+                g.hp -= b.damage;
                 scene.remove(b.mesh);
                 bullets.splice(bi, 1);
                 updateGateText(g);
@@ -641,7 +630,6 @@ function animate() {
         }
     }
 
-    // 5. 敵処理
     for (let ei = enemies.length - 1; ei >= 0; ei--) {
         const e = enemies[ei];
         e.z += e.speed;
@@ -653,7 +641,7 @@ function animate() {
             const b = bullets[bi];
 
             if (Math.abs(b.x - e.x) < e.hitWidth && Math.abs(b.z - e.z) < e.hitDepth) {
-                e.hp -= b.damage; // 武器の威力分ダメージ
+                e.hp -= b.damage;
                 scene.remove(b.mesh);
                 bullets.splice(bi, 1);
 
@@ -662,7 +650,7 @@ function animate() {
                 }
 
                 if (e.hp <= 0) {
-                    score += e.type === 'normal' ? 1 : 15;[cite: 3]
+                    score += e.type === 'normal' ? 1 : 15;
                     scene.remove(e.mesh);
                     enemies.splice(ei, 1);
                     updateUI();
@@ -683,7 +671,7 @@ function animate() {
             if (player.hp <= 0) {
                 player.hp = 0;
                 isGameOver = true;
-                document.getElementById('final-score').innerText = "Final Score: " + score;[cite: 3]
+                document.getElementById('final-score').innerText = "Final Score: " + score;
                 document.getElementById('game-over').style.display = 'flex';
             }
         }
