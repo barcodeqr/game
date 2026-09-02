@@ -335,7 +335,6 @@ function createHeartMesh() {
     const group = new THREE.Group();
     const mat = new THREE.MeshStandardMaterial({ color: 0xe74c3c, emissive: 0xc0392b, roughness: 0.3 });
     
-    // ハートを形作るための簡易ジオメトリ（小さな球体とボックスの組み合わせ）
     const sphereGeo = new THREE.SphereGeometry(0.25, 8, 8);
     const lSphere = new THREE.Mesh(sphereGeo, mat);
     lSphere.position.set(-0.15, 0.2, 0);
@@ -351,7 +350,7 @@ function createHeartMesh() {
     cone.position.set(0, -0.15, 0);
     group.add(cone);
 
-    group.scale.set(0.6, 0.6, 0.6); // 小人の大きさに設定
+    group.scale.set(0.6, 0.6, 0.6);
     return group;
 }
 
@@ -467,35 +466,42 @@ function spawnGate() {
     const rand = Math.random();
     let type, label, hp;
 
-    // 時々ハートを流す (確率 20%)
-    if (rand < 0.2) {
+    // HPが30以下（赤くなる状態）のときはハートの出現確率を大幅にアップ（例: 50%）
+    let heartChance = player.hp <= 30 ? 0.5 : 0.2;
+
+    if (rand < heartChance) {
         type = 'heart';
         hp = 1;
         label = '';
-    } else if (player.cannons < 4) {
-        if (player.rapidLevel < 8 && rand < 0.6) {
-            type = 'rapid'; label = '速射';
-            hp = player.cannons === 1 ? Math.min(3, Math.max(2, 2 + Math.floor(score / 100))) : (15 + Math.floor(score / 5));
-        } else {
-            type = 'plus'; label = '武器';
-            hp = 15 + Math.floor(score / 5);
-        }
     } else {
-        if (player.weaponType === 'gun') {
-            type = 'cannon'; label = '大砲へ';
-            hp = 15 + Math.floor(score / 5);
-        } else if (player.weaponType === 'cannon' && rand < 0.4) {
-            type = 'laser'; label = 'レーザーへ';
-            hp = 20 + Math.floor(score / 5);
-        } else if (player.weaponType === 'laser' && rand < 0.6) {
-            type = 'missile'; label = 'ミサイルへ';
-            hp = 25 + Math.floor(score / 5);
-        } else if (player.rapidLevel < 8 && rand < 0.8) {
-            type = 'rapid'; label = '速射';
-            hp = 15 + Math.floor(score / 5);
+        // 最初（スコアが低い時）は速射が出やすくなるよう調整
+        let rapidChance = (score < 150) ? 0.65 : 0.35;
+
+        if (player.cannons < 4) {
+            if (player.rapidLevel < 8 && Math.random() < rapidChance) {
+                type = 'rapid'; label = '速射';
+                hp = player.cannons === 1 ? Math.min(3, Math.max(2, 2 + Math.floor(score / 100))) : (15 + Math.floor(score / 5));
+            } else {
+                type = 'plus'; label = '武器';
+                hp = 15 + Math.floor(score / 5);
+            }
         } else {
-            type = 'plus'; label = '武器';
-            hp = 15 + Math.floor(score / 5);
+            if (player.weaponType === 'gun') {
+                type = 'cannon'; label = '大砲へ';
+                hp = 15 + Math.floor(score / 5);
+            } else if (player.weaponType === 'cannon' && rand < 0.4) {
+                type = 'laser'; label = 'レーザーへ';
+                hp = 20 + Math.floor(score / 5);
+            } else if (player.weaponType === 'laser' && rand < 0.6) {
+                type = 'missile'; label = 'ミサイルへ';
+                hp = 25 + Math.floor(score / 5);
+            } else if (player.rapidLevel < 8 && Math.random() < rapidChance) {
+                type = 'rapid'; label = '速射';
+                hp = 15 + Math.floor(score / 5);
+            } else {
+                type = 'plus'; label = '武器';
+                hp = 15 + Math.floor(score / 5);
+            }
         }
     }
 
@@ -738,15 +744,15 @@ function animate() {
                         player.hp = Math.min(player.maxHp, player.hp + 30);
                     } else if (g.type === 'cannon') {
                         player.weaponType = 'cannon';
-                        player.cannons = 2; // 変更時に2台にリセット
+                        player.cannons = 2;
                         updatePlayercannons();
                     } else if (g.type === 'laser') {
                         player.weaponType = 'laser';
-                        player.cannons = 2; // 変更時に2台にリセット
+                        player.cannons = 2;
                         updatePlayercannons();
                     } else if (g.type === 'missile') {
                         player.weaponType = 'missile';
-                        player.cannons = 2; // 変更時に2台にリセット
+                        player.cannons = 2;
                         updatePlayercannons();
                     } else if (g.type === 'rapid') {
                         if (player.rapidLevel < 8) player.rapidLevel++;
