@@ -21,6 +21,30 @@
             color: #ff3333; flex-direction: column; justify-content: center;
             align-items: center; cursor: pointer;
         }
+        #ranking-box {
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid #555;
+            border-radius: 8px;
+            padding: 10px 20px;
+            margin-top: 15px;
+            max-height: 220px;
+            overflow-y: auto;
+            text-align: left;
+            width: 300px;
+        }
+        #ranking-box h3 {
+            margin: 0 0 5px 0;
+            font-size: 16px;
+            color: #ffea00;
+            text-align: center;
+        }
+        .ranking-item {
+            color: #fff;
+            font-size: 14px;
+            margin: 3px 0;
+            display: flex;
+            justify-content: space-between;
+        }
     </style>
 
     <!-- Three.js 外部ライブラリの読み込み -->
@@ -37,10 +61,16 @@
         <div id="hp-text" style="color:#2ecc71; font-size: 20px; margin-top: 6px; white-space: nowrap;">HP: 125 / 125</div>
     </div>
     <div id="game-over">
-        <h1 style="font-size: 40px; margin: 0;">GAME OVER</h1>
-        <p style="color:#fff; font-size:18px;">防衛線が突破された！</p>
-        <p id="final-score" style="color:#fff; font-size:18px;">Final Score: 0</p>
-        <p style="color:#aaa; font-size:14px; margin-top:20px;">画面をタップ/クリックで再挑戦</p>
+        <h1 style="font-size: 36px; margin: 0;">GAME OVER</h1>
+        <p style="color:#fff; font-size:16px; margin: 5px 0;">防衛線が突破された！</p>
+        <p id="final-score" style="color:#ffea00; font-size:18px; margin: 5px 0;">Final Score: 0</p>
+        
+        <div id="ranking-box">
+            <h3>- ランク (上位10位) -</h3>
+            <div id="ranking-list"></div>
+        </div>
+
+        <p style="color:#aaa; font-size:13px; margin-top:15px;">画面をタップ/クリックで再挑戦</p>
     </div>
 
 <script>
@@ -178,7 +208,7 @@ let bullets = [];
 let enemies = [];
 let gates = [];
 
-function createTextSprite(text, fontSize = 80, textColor = "#ffff00", strokeColor = "#000000") {
+function createTextSprite(text, fontSize = 75, textColor = "#ffff00", strokeColor = "#000000") {
     const canvas = document.createElement('canvas');
     canvas.width = 512; 
     canvas.height = 256;
@@ -313,7 +343,7 @@ function createHumanMesh(scale, colorOverride, hp = 1) {
 
     let hpSpriteObj = null;
     if (scale > 1.2) {
-        hpSpriteObj = createTextSprite(`HP:${hp}`, 80, "#ffea00", "#000000");
+        hpSpriteObj = createTextSprite(`HP:${hp}`, 75, "#ffea00", "#000000");
         const textMat = new THREE.MeshBasicMaterial({ map: hpSpriteObj.texture, transparent: true, side: THREE.DoubleSide });
         const textGeo = new THREE.PlaneGeometry(5, 2.5);
         const hpMesh = new THREE.Mesh(textGeo, textMat);
@@ -328,7 +358,7 @@ function updateEnemyHpText(enemy) {
     if (!enemy.hpSpriteObj) return;
     const ctx = enemy.hpSpriteObj.canvas.getContext('2d');
     ctx.clearRect(0, 0, 512, 256);
-    ctx.font = "900 80px sans-serif";
+    ctx.font = "900 75px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
 
@@ -418,7 +448,6 @@ function createGateMesh(hp, type, label) {
     else if (type === 'rapid') textColor = "#00ffff";
     else if (type === 'plus') textColor = "#2ecc71";
 
-    // 文字サイズを小さめ（75px）に調整して枠内からはみ出さないように修正
     const textSprite = createTextSprite(labelText, 75, textColor, "#000000");
     const textMat = new THREE.MeshBasicMaterial({ map: textSprite.texture, transparent: true });
     const textGeo = new THREE.PlaneGeometry(5.0, 2.5);
@@ -598,6 +627,50 @@ function spawnGiantHumanEnemy() {
         hitWidth: 1.5,
         hitDepth: 0.8
     });
+}
+
+function handleGameOver() {
+    isGameOver = true;
+    document.getElementById('final-score').innerText = "Final Score: " + score;
+
+    // 日時文字列の作成 (例: 2026/9/4/0:32)
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()}/${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    // ローカルストレージからランキングを読み込み
+    let ranking = [];
+    try {
+        const saved = localStorage.getItem('tank_defense_ranking');
+        if (saved) ranking = JSON.parse(saved);
+    } catch (e) {
+        ranking = [];
+    }
+
+    // 新しいスコアを追加してスコア順にソート
+    ranking.push({ score: score, date: dateStr });
+    ranking.sort((a, b) => b.score - a.score);
+
+    // 上位10位までにする
+    if (ranking.length > 10) {
+        ranking = ranking.slice(0, 10);
+    }
+
+    // 保存し直す
+    try {
+        localStorage.setItem('tank_defense_ranking', JSON.stringify(ranking));
+    } catch (e) {}
+
+    // ランキングのHTML表示を更新
+    const listEl = document.getElementById('ranking-list');
+    listEl.innerHTML = '';
+    ranking.forEach((item, index) => {
+        const rankDiv = document.createElement('div');
+        rankDiv.className = 'ranking-item';
+        rankDiv.innerHTML = `<span>${index + 1}位 ${item.score}点</span><span>${item.date}</span>`;
+        listEl.appendChild(rankDiv);
+    });
+
+    document.getElementById('game-over').style.display = 'flex';
 }
 
 function restartGame() {
@@ -841,9 +914,7 @@ function animate() {
 
             if (player.hp <= 0) {
                 player.hp = 0;
-                isGameOver = true;
-                document.getElementById('final-score').innerText = "Final Score: " + score;
-                document.getElementById('game-over').style.display = 'flex';
+                handleGameOver();
             }
         }
     }
