@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 武器防衛ゲーム</title>
+    <title>戦車ミサイル防衛</title>
+    <!-- アイコンの設定 -->
+    <link rel="icon" href="icon.png" type="image/png">
+    <link rel="apple-touch-icon" href="icon.png">
     <style>
         body { margin: 0; overflow: hidden; background: #1a1a1a; font-family: sans-serif; user-select: none; touch-action: none; }
         #canvas-container { width: 100vw; height: 100vh; display: block; }
@@ -201,9 +204,8 @@ function createTextSprite(text, fontSize = 90, textColor = "#ffff00", strokeColo
 
 function createWeaponMesh(weaponType) {
     const group = new THREE.Group();
-    const tankColor = 0x4a5320; // リアル戦車風のオリーブドラブ色
+    const tankColor = 0x4a5320;
 
-    // 1. 車体（ハル）
     const hullGeo = new THREE.BoxGeometry(0.9, 0.3, 1.1);
     const hullMat = new THREE.MeshStandardMaterial({ color: tankColor, roughness: 0.7 });
     const hull = new THREE.Mesh(hullGeo, hullMat);
@@ -211,7 +213,6 @@ function createWeaponMesh(weaponType) {
     hull.castShadow = true;
     group.add(hull);
 
-    // 2. キャタピラ（左右）
     const trackGeo = new THREE.BoxGeometry(0.2, 0.28, 1.15);
     const trackMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
     [-0.45, 0.45].forEach(ox => {
@@ -221,7 +222,6 @@ function createWeaponMesh(weaponType) {
         group.add(track);
     });
 
-    // 3. 砲塔（タレット）
     const turretGeo = new THREE.BoxGeometry(0.5, 0.25, 0.6);
     const turretMat = new THREE.MeshStandardMaterial({ color: tankColor, roughness: 0.6 });
     const turret = new THREE.Mesh(turretGeo, turretMat);
@@ -229,7 +229,6 @@ function createWeaponMesh(weaponType) {
     turret.castShadow = true;
     group.add(turret);
 
-    // 4. 武器タイプ別の砲身
     if (weaponType === 'gun') {
         const barrelGeo = new THREE.CylinderGeometry(0.06, 0.07, 1.0, 8);
         const barrelMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8 });
@@ -671,7 +670,6 @@ function animate() {
             let bMesh, bulletData;
 
             if (player.weaponType === 'missile') {
-                // 大砲の弾のような長い円柱状（砲弾状）に変更
                 const missileGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.8, 8);
                 const missileMat = new THREE.MeshStandardMaterial({ color: 0xe74c3c, metalness: 0.5 });
                 bMesh = new THREE.Mesh(missileGeo, missileMat);
