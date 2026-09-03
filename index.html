@@ -178,7 +178,7 @@ let bullets = [];
 let enemies = [];
 let gates = [];
 
-function createTextSprite(text, fontSize = 90, textColor = "#ffff00", strokeColor = "#000000") {
+function createTextSprite(text, fontSize = 80, textColor = "#ffff00", strokeColor = "#000000") {
     const canvas = document.createElement('canvas');
     canvas.width = 512; 
     canvas.height = 256;
@@ -191,7 +191,7 @@ function createTextSprite(text, fontSize = 90, textColor = "#ffff00", strokeColo
 
     if (strokeColor) {
         ctx.strokeStyle = strokeColor;
-        ctx.lineWidth = 16;
+        ctx.lineWidth = 14;
         ctx.strokeText(text, 256, 128);
     }
 
@@ -313,7 +313,7 @@ function createHumanMesh(scale, colorOverride, hp = 1) {
 
     let hpSpriteObj = null;
     if (scale > 1.2) {
-        hpSpriteObj = createTextSprite(`HP:${hp}`, 100, "#ffea00", "#000000");
+        hpSpriteObj = createTextSprite(`HP:${hp}`, 80, "#ffea00", "#000000");
         const textMat = new THREE.MeshBasicMaterial({ map: hpSpriteObj.texture, transparent: true, side: THREE.DoubleSide });
         const textGeo = new THREE.PlaneGeometry(5, 2.5);
         const hpMesh = new THREE.Mesh(textGeo, textMat);
@@ -328,12 +328,12 @@ function updateEnemyHpText(enemy) {
     if (!enemy.hpSpriteObj) return;
     const ctx = enemy.hpSpriteObj.canvas.getContext('2d');
     ctx.clearRect(0, 0, 512, 256);
-    ctx.font = "900 100px sans-serif";
+    ctx.font = "900 80px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
 
     ctx.strokeStyle = "#000000";
-    ctx.lineWidth = 16;
+    ctx.lineWidth = 14;
     ctx.strokeText(`HP:${enemy.hp}`, 256, 128);
 
     ctx.fillStyle = "#ffea00";
@@ -412,13 +412,14 @@ function createGateMesh(hp, type, label) {
     const labelText = `${prefix}: ${hp}`;
     
     let textColor = "#00ffff";
-    if (type === 'laser') textColor = "#9b59b6";
-    else if (type === 'cannon') textColor = "#e67e22";
-    else if (type === 'missile') textColor = "#e74c3c";
+    if (type === 'laser') textColor = "#da70d6"; 
+    else if (type === 'cannon') textColor = "#ffaa00"; 
+    else if (type === 'missile') textColor = "#ff4444"; 
     else if (type === 'rapid') textColor = "#00ffff";
     else if (type === 'plus') textColor = "#2ecc71";
 
-    const textSprite = createTextSprite(labelText, 140, textColor, "#000000");
+    // 文字サイズを小さめ（75px）に調整して枠内からはみ出さないように修正
+    const textSprite = createTextSprite(labelText, 75, textColor, "#000000");
     const textMat = new THREE.MeshBasicMaterial({ map: textSprite.texture, transparent: true });
     const textGeo = new THREE.PlaneGeometry(5.0, 2.5);
     const textMesh = new THREE.Mesh(textGeo, textMat);
@@ -432,7 +433,7 @@ function updateGateText(gate) {
     if (gate.type === 'heart') return;
     const ctx = gate.textSprite.canvas.getContext('2d');
     ctx.clearRect(0, 0, 512, 256);
-    ctx.font = "900 140px sans-serif";
+    ctx.font = "900 75px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
 
@@ -440,14 +441,14 @@ function updateGateText(gate) {
     const labelText = `${prefix}: ${gate.hp}`;
     
     let textColor = "#00ffff";
-    if (gate.type === 'laser') textColor = "#9b59b6";
-    else if (gate.type === 'cannon') textColor = "#e67e22";
-    else if (gate.type === 'missile') textColor = "#e74c3c";
+    if (gate.type === 'laser') textColor = "#da70d6";
+    else if (gate.type === 'cannon') textColor = "#ffaa00";
+    else if (gate.type === 'missile') textColor = "#ff4444";
     else if (gate.type === 'rapid') textColor = "#00ffff";
     else if (gate.type === 'plus') textColor = "#2ecc71";
 
     ctx.strokeStyle = "#000000";
-    ctx.lineWidth = 18;
+    ctx.lineWidth = 14;
     ctx.strokeText(labelText, 256, 128);
     ctx.fillStyle = textColor;
     ctx.fillText(labelText, 256, 128);
@@ -629,7 +630,7 @@ function updateUI() {
     let weaponName = "鉄砲 (威力:1)";
     if (player.weaponType === 'cannon') weaponName = "大砲 (威力:2)";
     if (player.weaponType === 'laser') weaponName = "レーザー (威力:3)";
-    if (player.weaponType === 'missile') weaponName = "ミサイル (威力:4)";
+    if (player.weaponType === 'missile') weaponName = "ミサイル (威力:8)";
     document.getElementById('weapon-text').innerText = "WEAPON: " + weaponName;
     
     document.getElementById('rapid-text').innerText = "速射レベル: " + player.rapidLevel + " / 8";
@@ -676,10 +677,10 @@ function animate() {
                 bMesh.rotation.x = Math.PI / 2;
                 bMesh.position.set(bX, 0.6, bZ);
                 scene.add(bMesh);
-                bulletData = { mesh: bMesh, x: bX, z: bZ, damage: 4, type: 'missile' };
+                bulletData = { mesh: bMesh, x: bX, z: bZ, damage: 8, type: 'missile' };
             } else if (player.weaponType === 'laser') {
-                const laserGeo = new THREE.BoxGeometry(0.1, 0.1, 1.2);
-                const laserMat = new THREE.MeshBasicMaterial({ color: 0x9b59b6 });
+                const laserGeo = new THREE.BoxGeometry(0.12, 0.12, 1.2);
+                const laserMat = new THREE.MeshBasicMaterial({ color: 0xd4ac0d });
                 bMesh = new THREE.Mesh(laserGeo, laserMat);
                 bMesh.position.set(bX, 0.6, bZ);
                 scene.add(bMesh);
