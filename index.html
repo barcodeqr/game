@@ -538,38 +538,42 @@ function spawnGate() {
         hp = 1;
         label = '';
     } else {
-        let upgradeChance = (score < 150) ? 0.65 : 0.35;
+        // 周回に入ったときはスコア基準ではなく「現在の周回内スコア（0〜3000）」で計算し、
+        // さらに周回数に応じた緩やかな補正のみにすることで、初期装備でも壊せる硬さに調整
+        let currentScoreInLoop = score - (loopCount * 3000);
+        let baseScaling = Math.floor(currentScoreInLoop / 15) + (loopCount * 5);
+        let upgradeChance = (currentScoreInLoop < 150) ? 0.65 : 0.35;
 
         if (player.cannons < 4) {
             if (player.rapidLevel < 8 && Math.random() < upgradeChance) {
                 type = 'rapid'; label = '速射';
-                hp = player.cannons === 1 ? Math.min(3, Math.max(2, 2 + Math.floor(score / 100))) : (15 + Math.floor(score / 5));
+                hp = currentScoreInLoop === 0 ? 2 : Math.max(2, 2 + baseScaling);
             } else if (player.pierceLevel < 4 && Math.random() < 0.5) {
                 type = 'pierce'; label = '貫通';
-                hp = 15 + Math.floor(score / 5);
+                hp = Math.max(3, 3 + baseScaling);
             } else {
                 type = 'plus'; label = '武器';
-                hp = 15 + Math.floor(score / 5);
+                hp = Math.max(3, 3 + baseScaling);
             }
         } else {
             if (player.weaponType === 'gun') {
                 type = 'cannon'; label = '大砲';
-                hp = 15 + Math.floor(score / 5);
+                hp = Math.max(4, 4 + baseScaling);
             } else if (player.weaponType === 'cannon' && rand < 0.35) {
                 type = 'laser'; label = 'レーザー';
-                hp = 20 + Math.floor(score / 5);
+                hp = Math.max(5, 5 + baseScaling);
             } else if (player.weaponType === 'laser' && rand < 0.5) {
                 type = 'missile'; label = 'ミサイル';
-                hp = 25 + Math.floor(score / 5);
+                hp = Math.max(6, 6 + baseScaling);
             } else if (player.pierceLevel < 4 && rand < 0.7) {
                 type = 'pierce'; label = '貫通';
-                hp = 15 + Math.floor(score / 5);
+                hp = Math.max(3, 3 + baseScaling);
             } else if (player.rapidLevel < 8 && rand < 0.85) {
                 type = 'rapid'; label = '速射';
-                hp = 15 + Math.floor(score / 5);
+                hp = Math.max(2, 2 + baseScaling);
             } else {
                 type = 'plus'; label = '武器';
-                hp = 15 + Math.floor(score / 5);
+                hp = Math.max(3, 3 + baseScaling);
             }
         }
     }
@@ -627,7 +631,6 @@ function spawnEnemyFormation() {
                     z: startZ,
                     type: 'normal',
                     hp: 1,
-                    // 周回が進むごとに速度がさらにアップ
                     speed: (0.07 + (loopCount * 0.02)),
                     hitWidth: 0.7, 
                     hitDepth: 0.7
@@ -657,7 +660,6 @@ function spawnGiantHumanEnemy() {
         z: -15,
         type: 'giant',
         hp: hp,
-        // 周回が進むごとに大型の速度もアップ
         speed: (0.035 + (loopCount * 0.01)),
         hitWidth: 1.5,
         hitDepth: 0.8
@@ -737,7 +739,6 @@ function restartGame() {
 }
 
 function nextLoopGame() {
-    // 3000点達成時：スコアを引き継ぎ、装備を「初期の鉄砲1台・速射1・貫通1」に戻して難易度を上げて再スタート
     isClearScreen = false;
     loopCount++;
     frame = 0;
@@ -745,7 +746,6 @@ function nextLoopGame() {
     nextRightSpawnTimer = 600;
     nextLeftSpawnTimer = 500;
     
-    // 装備を初期状態にリセット
     player.cannons = 1;
     player.rapidLevel = 1;
     player.pierceLevel = 1;
@@ -902,7 +902,7 @@ function animate() {
 
                 if (g.hp <= 0) {
                     if (g.type === 'heart') {
-                        player.hp = Math.min(player.maxHp, player.hp + 30);
+                        player.hp =詰 = Math.min(player.maxHp, player.hp + 30);
                     } else if (g.type === 'cannon') {
                         player.weaponType = 'cannon';
                         player.cannons = 2;
@@ -971,7 +971,6 @@ function animate() {
                     updateUI();
                     enemyDestroyed = true;
 
-                    // 3000点到達判定（周回ごとの閾値）
                     let targetClearScore = (loopCount + 1) * 3000;
                     if (score >= targetClearScore) {
                         handleClearScreen();
