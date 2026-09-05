@@ -57,6 +57,7 @@
         <div id="score-text">SCORE: 0</div>
         <div id="weapon-text">WEAPON: 鉄砲 (威力:1)</div>
         <div id="rapid-text">速射レベル: 1 / 8</div>
+        <div id="pierce-text">貫通力: 1 / 4</div>
         <div id="cannons-text">武器台数: 1 / 4 (MAX)</div>
         <div id="hp-text" style="color:#2ecc71; font-size: 20px; margin-top: 6px; white-space: nowrap;">HP: 125 / 125</div>
     </div>
@@ -198,6 +199,7 @@ let player = {
     maxHp: 125,
     cannons: 1,
     rapidLevel: 1,
+    pierceLevel: 1,
     weaponType: 'gun'
 };
 
@@ -373,6 +375,7 @@ function updateEnemyHpText(enemy) {
 
 function getGateLabelPrefix(type) {
     if (type === 'rapid') return '速射';
+    if (type === 'pierce') return '貫通';
     if (type === 'plus') return '武器';
     if (type === 'cannon') return '大砲';
     if (type === 'laser') return 'レーザー';
@@ -429,7 +432,7 @@ function createGateMesh(hp, type, label) {
         if (type === 'cannon') dummyWeapon = 'cannon';
         if (type === 'laser') dummyWeapon = 'laser';
         if (type === 'missile') dummyWeapon = 'missile';
-        if (type === 'rapid') dummyWeapon = 'gun';
+        if (type === 'rapid' || type === 'pierce') dummyWeapon = 'gun';
 
         const model = createWeaponMesh(dummyWeapon);
         model.scale.set(1.2, 1.2, 1.2);
@@ -446,6 +449,7 @@ function createGateMesh(hp, type, label) {
     else if (type === 'cannon') textColor = "#ffaa00"; 
     else if (type === 'missile') textColor = "#ff4444"; 
     else if (type === 'rapid') textColor = "#00ffff";
+    else if (type === 'pierce') textColor = "#3498db";
     else if (type === 'plus') textColor = "#2ecc71";
 
     const textSprite = createTextSprite(labelText, 75, textColor, "#000000");
@@ -474,6 +478,7 @@ function updateGateText(gate) {
     else if (gate.type === 'cannon') textColor = "#ffaa00";
     else if (gate.type === 'missile') textColor = "#ff4444";
     else if (gate.type === 'rapid') textColor = "#00ffff";
+    else if (gate.type === 'pierce') textColor = "#3498db";
     else if (gate.type === 'plus') textColor = "#2ecc71";
 
     ctx.strokeStyle = "#000000";
@@ -523,12 +528,15 @@ function spawnGate() {
         hp = 1;
         label = '';
     } else {
-        let rapidChance = (score < 150) ? 0.65 : 0.35;
+        let upgradeChance = (score < 150) ? 0.65 : 0.35;
 
         if (player.cannons < 4) {
-            if (player.rapidLevel < 8 && Math.random() < rapidChance) {
+            if (player.rapidLevel < 8 && Math.random() < upgradeChance) {
                 type = 'rapid'; label = '速射';
                 hp = player.cannons === 1 ? Math.min(3, Math.max(2, 2 + Math.floor(score / 100))) : (15 + Math.floor(score / 5));
+            } else if (player.pierceLevel < 4 && Math.random() < 0.5) {
+                type = 'pierce'; label = '貫通';
+                hp = 15 + Math.floor(score / 5);
             } else {
                 type = 'plus'; label = '武器';
                 hp = 15 + Math.floor(score / 5);
@@ -537,13 +545,16 @@ function spawnGate() {
             if (player.weaponType === 'gun') {
                 type = 'cannon'; label = '大砲';
                 hp = 15 + Math.floor(score / 5);
-            } else if (player.weaponType === 'cannon' && rand < 0.4) {
+            } else if (player.weaponType === 'cannon' && rand < 0.35) {
                 type = 'laser'; label = 'レーザー';
                 hp = 20 + Math.floor(score / 5);
-            } else if (player.weaponType === 'laser' && rand < 0.6) {
+            } else if (player.weaponType === 'laser' && rand < 0.5) {
                 type = 'missile'; label = 'ミサイル';
                 hp = 25 + Math.floor(score / 5);
-            } else if (player.rapidLevel < 8 && Math.random() < rapidChance) {
+            } else if (player.pierceLevel < 4 && rand < 0.7) {
+                type = 'pierce'; label = '貫通';
+                hp = 15 + Math.floor(score / 5);
+            } else if (player.rapidLevel < 8 && rand < 0.85) {
                 type = 'rapid'; label = '速射';
                 hp = 15 + Math.floor(score / 5);
             } else {
@@ -633,11 +644,9 @@ function handleGameOver() {
     isGameOver = true;
     document.getElementById('final-score').innerText = "Final Score: " + score;
 
-    // 日時文字列の作成 (例: 2026/9/4/0:32)
     const now = new Date();
     const dateStr = `${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()}/${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    // ローカルストレージからランキングを読み込み
     let ranking = [];
     try {
         const saved = localStorage.getItem('tank_defense_ranking');
@@ -646,21 +655,17 @@ function handleGameOver() {
         ranking = [];
     }
 
-    // 新しいスコアを追加してスコア順にソート
     ranking.push({ score: score, date: dateStr });
     ranking.sort((a, b) => b.score - a.score);
 
-    // 上位10位までにする
     if (ranking.length > 10) {
         ranking = ranking.slice(0, 10);
     }
 
-    // 保存し直す
     try {
         localStorage.setItem('tank_defense_ranking', JSON.stringify(ranking));
     } catch (e) {}
 
-    // ランキングのHTML表示を更新
     const listEl = document.getElementById('ranking-list');
     listEl.innerHTML = '';
     ranking.forEach((item, index) => {
@@ -683,6 +688,7 @@ function restartGame() {
     player.hp = 125;
     player.cannons = 1;
     player.rapidLevel = 1;
+    player.pierceLevel = 1;
     player.weaponType = 'gun';
     player.targetX = 0;
     player.x = 0;
@@ -707,6 +713,7 @@ function updateUI() {
     document.getElementById('weapon-text').innerText = "WEAPON: " + weaponName;
     
     document.getElementById('rapid-text').innerText = "速射レベル: " + player.rapidLevel + " / 8";
+    document.getElementById('pierce-text').innerText = "貫通力: " + player.pierceLevel + " / 4";
     document.getElementById('cannons-text').innerText = "武器台数: " + player.cannons + " / 4 (MAX)";
     
     const hpText = document.getElementById('hp-text');
@@ -750,28 +757,28 @@ function animate() {
                 bMesh.rotation.x = Math.PI / 2;
                 bMesh.position.set(bX, 0.6, bZ);
                 scene.add(bMesh);
-                bulletData = { mesh: bMesh, x: bX, z: bZ, damage: 8, type: 'missile' };
+                bulletData = { mesh: bMesh, x: bX, z: bZ, damage: 8, pierce: player.pierceLevel, type: 'missile' };
             } else if (player.weaponType === 'laser') {
                 const laserGeo = new THREE.BoxGeometry(0.12, 0.12, 1.2);
                 const laserMat = new THREE.MeshBasicMaterial({ color: 0xd4ac0d });
                 bMesh = new THREE.Mesh(laserGeo, laserMat);
                 bMesh.position.set(bX, 0.6, bZ);
                 scene.add(bMesh);
-                bulletData = { mesh: bMesh, x: bX, z: bZ, damage: 3, type: 'laser' };
+                bulletData = { mesh: bMesh, x: bX, z: bZ, damage: 3, pierce: player.pierceLevel, type: 'laser' };
             } else if (player.weaponType === 'cannon') {
                 const bulletGeo = new THREE.SphereGeometry(0.25, 8, 8);
                 const bulletMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
                 bMesh = new THREE.Mesh(bulletGeo, bulletMat);
                 bMesh.position.set(bX, 0.6, bZ);
                 scene.add(bMesh);
-                bulletData = { mesh: bMesh, x: bX, z: bZ, damage: 2, type: 'cannon' };
+                bulletData = { mesh: bMesh, x: bX, z: bZ, damage: 2, pierce: player.pierceLevel, type: 'cannon' };
             } else {
                 const bulletGeo = new THREE.SphereGeometry(0.12, 8, 8);
                 const bulletMat = new THREE.MeshStandardMaterial({ color: 0x7f8c8d });
                 bMesh = new THREE.Mesh(bulletGeo, bulletMat);
                 bMesh.position.set(bX, 0.6, bZ);
                 scene.add(bMesh);
-                bulletData = { mesh: bMesh, x: bX, z: bZ, damage: 1, type: 'gun' };
+                bulletData = { mesh: bMesh, x: bX, z: bZ, damage: 1, pierce: player.pierceLevel, type: 'gun' };
             }
 
             bullets.push(bulletData);
@@ -827,8 +834,8 @@ function animate() {
             const b = bullets[bi];
             if (Math.abs(b.x - g.x) < 2.5 && Math.abs(b.z - g.z) < 1.0) {
                 g.hp -= b.damage;
-                scene.remove(b.mesh);
-                bullets.splice(bi, 1);
+                b.pierce--; // 貫通回数を消費
+
                 updateGateText(g);
 
                 if (g.hp <= 0) {
@@ -837,17 +844,22 @@ function animate() {
                     } else if (g.type === 'cannon') {
                         player.weaponType = 'cannon';
                         player.cannons = 2;
+                        player.pierceLevel = 1; // 武器変更時に貫通力リセット
                         updatePlayercannons();
                     } else if (g.type === 'laser') {
                         player.weaponType = 'laser';
                         player.cannons = 2;
+                        player.pierceLevel = 1; // 武器変更時に貫通力リセット
                         updatePlayercannons();
                     } else if (g.type === 'missile') {
                         player.weaponType = 'missile';
                         player.cannons = 2;
+                        player.pierceLevel = 1; // 武器変更時に貫通力リセット
                         updatePlayercannons();
                     } else if (g.type === 'rapid') {
                         if (player.rapidLevel < 8) player.rapidLevel++;
+                    } else if (g.type === 'pierce') {
+                        if (player.pierceLevel < 4) player.pierceLevel++;
                     } else if (g.type === 'plus') {
                         if (player.cannons < 4) player.cannons++;
                         updatePlayercannons();
@@ -855,8 +867,15 @@ function animate() {
                     scene.remove(g.meshData.mesh);
                     gates.splice(gi, 1);
                     updateUI();
-                    break;
                 }
+
+                // 貫通力がなくなったら弾を消滅
+                if (b.pierce <= 0) {
+                    scene.remove(b.mesh);
+                    bullets.splice(bi, 1);
+                }
+
+                break;
             }
         }
 
@@ -878,8 +897,7 @@ function animate() {
 
             if (Math.abs(b.x - e.x) < e.hitWidth && Math.abs(b.z - e.z) < e.hitDepth) {
                 e.hp -= b.damage;
-                scene.remove(b.mesh);
-                bullets.splice(bi, 1);
+                b.pierce--; // 貫通回数を消費
 
                 if (e.type !== 'normal') {
                     updateEnemyHpText(e);
@@ -891,8 +909,15 @@ function animate() {
                     enemies.splice(ei, 1);
                     updateUI();
                     enemyDestroyed = true;
-                    break;
                 }
+
+                // 貫通力がなくなったら弾を消滅
+                if (b.pierce <= 0) {
+                    scene.remove(b.mesh);
+                    bullets.splice(bi, 1);
+                }
+
+                break;
             }
         }
 
